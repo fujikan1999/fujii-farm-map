@@ -423,9 +423,19 @@ function initMap() {
 }
 </script>
 
-<!-- Google Maps API（APIキーを上の GOOGLE_MAPS_API_KEY に入力後、下の YOUR_API_KEY_HERE も同じキーに変更してください） -->
-<script async
-  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAK2IaHKIeNTkEiLguKp_b-2DMQs4-75e4&callback=initMap&language=ja&region=JP">
+<script>
+// Google Maps を動的に読み込む（推奨方式）
+window.initMap = initMap; // グローバルに登録
+(function() {
+  const script = document.createElement('script');
+  script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAK2IaHKIeNTkEiLguKp_b-2DMQs4-75e4&callback=initMap&loading=async&language=ja&region=JP';
+  script.async = true;
+  script.onerror = function() {
+    document.getElementById('map').innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#c0392b;">地図の読み込みに失敗しました。<br>APIキーまたはネットワークを確認してください。</div>';
+  };
+  document.head.appendChild(script);
+})();
 </script>
 
 </body>
