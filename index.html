@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>藤井農園 圃場マップ</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; }
+
+    header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      background: #2c5f2e;
+      color: white;
+      padding: 10px 14px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    header h1 { font-size: 17px; font-weight: bold; }
+    header p  { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+
+    #map {
+      position: fixed;
+      top: 46px; left: 0; right: 0; bottom: 0;
+    }
+
+    /* ========== 凡例 ========== */
+    #legend {
+      position: fixed;
+      bottom: 24px; right: 10px;
+      z-index: 1000;
+      background: rgba(255,255,255,0.95);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+      min-width: 160px;
+    }
+    #legend h3 { font-size: 12px; color: #555; margin-bottom: 6px; }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: #333;
+      margin: 4px 0;
+    }
+    .legend-color {
+      width: 16px; height: 16px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,0.15);
+    }
+
+    /* ========== 情報パネル ========== */
+    #info-panel {
+      position: fixed;
+      bottom: -220px;
+      left: 0; right: 0;
+      z-index: 1000;
+      background: white;
+      border-radius: 18px 18px 0 0;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+      padding: 16px 20px 28px;
+      transition: bottom 0.3s ease;
+    }
+    #info-panel.show { bottom: 0; }
+
+    #panel-handle {
+      width: 36px; height: 4px;
+      background: #ddd;
+      border-radius: 2px;
+      margin: 0 auto 14px;
+    }
+    #panel-name {
+      font-size: 18px;
+      font-weight: bold;
+      color: #2c5f2e;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-no {
+      background: #2c5f2e;
+      color: white;
+      border-radius: 50%;
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+    .panel-no.shop { background: #c0392b; }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 6px 8px;
+      font-size: 14px;
+    }
+    .info-label { color: #888; }
+    .info-value { color: #222; font-weight: 500; }
+    #panel-close {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: #f0f0f0;
+      border: none;
+      border-radius: 50%;
+      width: 28px; height: 28px;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>藤井農園 圃場マップ</h1>
+  <p>圃場をタップすると詳細を表示</p>
+</header>
+
+<div id="map"></div>
+
+<!-- 凡例 -->
+<div id="legend">
+  <h3>作物の種類</h3>
+  <div class="legend-item"><div class="legend-color" style="background:#9b59b6"></div>いちじく</div>
+  <div class="legend-item"><div class="legend-color" style="background:#4a90d9"></div>米</div>
+  <div class="legend-item"><div class="legend-color" style="background:#f1c40f"></div>白トウモロコシ</div>
+  <div class="legend-item"><div class="legend-color" style="background:#e74c3c"></div>ミニトマト</div>
+  <div class="legend-item"><div class="legend-color" style="background:#c0392b"></div>大玉トマト</div>
+</div>
+
+<!-- 情報パネル -->
+<div id="info-panel">
+  <div id="panel-handle"></div>
+  <button id="panel-close">×</button>
+  <div id="panel-name">
+    <div class="panel-no" id="panel-no">1</div>
+    <span id="panel-name-text">-</span>
+  </div>
+  <div class="info-grid">
+    <span class="info-label">面積</span><span class="info-value" id="panel-area">-</span>
+    <span class="info-label">作物</span><span class="info-value" id="panel-crop">-</span>
+    <span class="info-label">住所</span><span class="info-value" id="panel-address">-</span>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// ★ Google Maps APIキーをここに入力してください
+// ================================================================
+const GOOGLE_MAPS_API_KEY = 'AIzaSyAK2IaHKIeNTkEiLguKp_b-2DMQs4-75e4';
+
+// ========== 作物ごとの色 ==========
+const CROP_COLOR = {
+  'いちじく（露地）':      { fill: '#9b59b6', stroke: '#7d3c98' },
+  'いちじく（ハウス）':    { fill: '#9b59b6', stroke: '#7d3c98' },
+  '米':                   { fill: '#4a90d9', stroke: '#2471a3' },
+  '白トウモロコシ':        { fill: '#f1c40f', stroke: '#b7950b' },
+  'ミニトマト（ハウス）':  { fill: '#e74c3c', stroke: '#c0392b' },
+  '大玉トマト（露地）':    { fill: '#c0392b', stroke: '#922b21' },
+  'default':              { fill: '#95a5a6', stroke: '#717d7e' },
+};
+
+function getColor(crop) {
+  return CROP_COLOR[crop] || CROP_COLOR['default'];
+}
+
+// ========== 圃場データ ==========
+const fields = [
+  {
+    no: '1', name: '水かけ', area: '17 a',
+    address: '羽曳野市誉田7-884', crop: '米',
+    coords: [
+      { lat: 34.559566346681706, lng: 135.61391081836737 },
+      { lat: 34.55955494699841,  lng: 135.61410252094703 },
+      { lat: 34.55868033618708,  lng: 135.61409351061334 },
+      { lat: 34.5586989109272,   lng: 135.61388375284662 },
+    ]
+  },
+  {
+    no: '2', name: '堂ノ前', area: '15 a',
+    address: '羽曳野市誉田7-728-1', crop: '白トウモロコシ',
+    coords: [
+      { lat: 34.56200035953029,  lng: 135.6149414644108  },
+      { lat: 34.56199945726853,  lng: 135.6150871826228  },
+      { lat: 34.56154471609373,  lng: 135.61505760073013 },
+      { lat: 34.56154832516047,  lng: 135.6149173606464  },
+    ]
+  },
+  {
+    no: '2H', name: '堂ノ前（トマトハウス）', area: '－',
+    address: '羽曳野市誉田7-728-1', crop: 'ミニトマト（ハウス）',
+    coords: [
+      { lat: 34.56241763002768,  lng: 135.61497557998896 },
+      { lat: 34.56250156523312,  lng: 135.61511773706118 },
+      { lat: 34.56200237039665,  lng: 135.61508555055426 },
+      { lat: 34.56201120572955,  lng: 135.61494071127314 },
+    ]
+  },
+  {
+    no: '3', name: 'いちじくハウス', area: '8 a',
+    address: '羽曳野市誉田7-851-1', crop: 'いちじく（ハウス）',
+    coords: [
+      { lat: 34.560521301782515, lng: 135.6144728440892  },
+      { lat: 34.56051523200494,  lng: 135.61470317101043 },
+      { lat: 34.560077031743575, lng: 135.61470350486712 },
+      { lat: 34.56008022179432,  lng: 135.61449277984946 },
+    ]
+  },
+  {
+    no: '4', name: '東（ヒガシ）', area: '5 a',
+    address: '羽曳野市誉田7-687～688', crop: 'いちじく（露地）',
+    coords: [
+      { lat: 34.5624416494229,   lng: 135.6140315518171  },
+      { lat: 34.562482250976736, lng: 135.61436681326728 },
+      { lat: 34.56230631076696,  lng: 135.61438215202642 },
+      { lat: 34.562224205208345, lng: 135.61407099434066 },
+    ]
+  },
+  {
+    no: '5', name: '石田（イシダ）', area: '10 a',
+    address: '羽曳野市誉田7-856-1', crop: 'いちじく（露地）',
+    coords: [
+      { lat: 34.560320204771905, lng: 135.61511106643712 },
+      { lat: 34.56029196652257,  lng: 135.61564853121055 },
+      { lat: 34.560118596595515, lng: 135.61564294923218 },
+      { lat: 34.560131730693556, lng: 135.61511106643712 },
+    ]
+  },
+  {
+    no: '6', name: 'はぜた', area: '10 a',
+    address: '羽曳野市誉田7-849', crop: 'いちじく（露地）',
+    coords: [
+      { lat: 34.56017000524239,  lng: 135.61429347593233 },
+      { lat: 34.5601644830372,   lng: 135.61448659497384 },
+      { lat: 34.559582440555204, lng: 135.61449195939164 },
+      { lat: 34.55958354500399,  lng: 135.6143015225591  },
+    ]
+  },
+  {
+    no: '7', name: '松村（マツムラ）', area: '15 a',
+    address: '羽曳野市誉田7-727-1', crop: 'いちじく（露地）',
+    coords: [
+      { lat: 34.5623490388397,   lng: 135.6147870023837  },
+      { lat: 34.56241309471487,  lng: 135.61496939258956 },
+      { lat: 34.561551649488365, lng: 135.61490636067577 },
+      { lat: 34.56156932024894,  lng: 135.614721288261   },
+    ]
+  },
+  {
+    no: '8', name: '土屋①（ツチヤ）', area: '10 a',
+    address: '羽曳野市誉田7-726-1', crop: 'いちじく（露地）',
+    coords: [
+      { lat: 34.56233793529843,  lng: 135.61462689827113 },
+      { lat: 34.56234456177145,  lng: 135.61476503202996 },
+      { lat: 34.56157146967922,  lng: 135.61470602343118 },
+      { lat: 34.56157588736868,  lng: 135.61457995961243 },
+    ]
+  },
+  {
+    no: '9', name: '土屋②（ツチヤ）', area: '8 a',
+    address: '羽曳野市誉田7-881', crop: 'いちじく（露地）',
+    coords: [
+      { lat: 34.55941357737925,  lng: 135.61433855534463 },
+      { lat: 34.55940695067274,  lng: 135.61445925474558 },
+      { lat: 34.55866917403254,  lng: 135.61443913817766 },
+      { lat: 34.55866917403254,  lng: 135.6143224620901  },
+    ]
+  },
+  {
+    no: '10', name: '墓裏①（ハカウラ）', area: '10 a',
+    address: '羽曳野市誉田7-802-1', crop: 'いちじく（露地）',
+    coords: [
+      { lat: 34.56142365402607,  lng: 135.61629120351049 },
+      { lat: 34.56140377438534,  lng: 135.61644140720944 },
+      { lat: 34.560812905105095, lng: 135.61639983297155 },
+      { lat: 34.56078750315456,  lng: 135.61623621822807 },
+    ]
+  },
+  {
+    no: '11', name: '墓裏②（ハカウラ）', area: '10 a',
+    address: '羽曳野市誉田7-803-1', crop: '大玉トマト（露地）',
+    coords: [
+      { lat: 34.56144353366401,  lng: 135.61615977527072 },
+      { lat: 34.56142807172533,  lng: 135.61628449798502 },
+      { lat: 34.56078750315657,  lng: 135.6162362182234  },
+      { lat: 34.56077204109593,  lng: 135.61610076667347 },
+    ]
+  },
+  {
+    no: '12', name: '塩野（シオノ）', area: '4 a',
+    address: '羽曳野市誉田7-835-1', crop: 'いちじく（露地）',
+    coords: [
+      { lat: 34.55991057887501,  lng: 135.61306852939742 },
+      { lat: 34.55989622109601,  lng: 135.6132053220518  },
+      { lat: 34.559609064995186, lng: 135.6131771588583  },
+      { lat: 34.5596156916856,   lng: 135.61300281527915 },
+    ]
+  },
+];
+
+const shop = {
+  name: '藤井農園 直売所',
+  address: '羽曳野市誉田6-1-3',
+  lat: 34.55990780521976,
+  lng: 135.61222717956224,
+};
+
+// ========== ポリゴン中心点 ==========
+function centroid(coords) {
+  const lat = coords.reduce((s, c) => s + c.lat, 0) / coords.length;
+  const lng = coords.reduce((s, c) => s + c.lng, 0) / coords.length;
+  return { lat, lng };
+}
+
+// ========== パネル制御 ==========
+const panel       = document.getElementById('info-panel');
+const panelNo     = document.getElementById('panel-no');
+const panelNameTx = document.getElementById('panel-name-text');
+const panelArea   = document.getElementById('panel-area');
+const panelCrop   = document.getElementById('panel-crop');
+const panelAddr   = document.getElementById('panel-address');
+
+function showPanel(field) {
+  panelNo.textContent   = field.no;
+  panelNo.className     = 'panel-no';
+  panelNameTx.textContent = field.name;
+  panelArea.textContent   = field.area;
+  panelCrop.textContent   = field.crop || '－';
+  panelAddr.textContent   = field.address;
+  panel.classList.add('show');
+}
+
+document.getElementById('panel-close').addEventListener('click', () => {
+  panel.classList.remove('show');
+});
+
+// ========== Google Maps 初期化 ==========
+function initMap() {
+  const map = new google.maps.Map(document.getElementById('map'), {
+    center: { lat: 34.5606, lng: 135.6143 },
+    zoom: 17,
+    mapTypeId: 'hybrid',          // 航空写真 + 地名ラベル
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    gestureHandling: 'greedy',    // スマホで1本指スクロール
+  });
+
+  // 地図タップでパネルを閉じる
+  map.addListener('click', () => panel.classList.remove('show'));
+
+  // -------- ポリゴン描画 --------
+  fields.forEach(field => {
+    const c = getColor(field.crop);
+
+    const polygon = new google.maps.Polygon({
+      paths: field.coords,
+      strokeColor:   c.stroke,
+      strokeOpacity: 0.9,
+      strokeWeight:  2,
+      fillColor:     c.fill,
+      fillOpacity:   0.45,
+      map: map,
+    });
+
+    // タップで情報パネル
+    polygon.addListener('click', () => showPanel(field));
+
+    // 中心に番号ラベル
+    new google.maps.Marker({
+      position:  centroid(field.coords),
+      map:       map,
+      label: {
+        text:       field.no,
+        color:      'white',
+        fontSize:   '11px',
+        fontWeight: 'bold',
+      },
+      icon: {
+        path:        google.maps.SymbolPath.CIRCLE,
+        scale:       13,
+        fillColor:   c.stroke,
+        fillOpacity: 1,
+        strokeColor: 'white',
+        strokeWeight: 2,
+      },
+    });
+  });
+
+  // -------- 直売所マーカー --------
+  const shopMarker = new google.maps.Marker({
+    position: { lat: shop.lat, lng: shop.lng },
+    map: map,
+    label: {
+      text:       '直売所',
+      color:      'white',
+      fontSize:   '11px',
+      fontWeight: 'bold',
+    },
+    icon: {
+      path:        google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+      scale:       8,
+      fillColor:   '#c0392b',
+      fillOpacity: 1,
+      strokeColor: 'white',
+      strokeWeight: 2,
+    },
+  });
+  shopMarker.addListener('click', () => {
+    panelNo.textContent   = '直';
+    panelNo.className     = 'panel-no shop';
+    panelNameTx.textContent = shop.name;
+    panelArea.textContent   = '－';
+    panelCrop.textContent   = '直売所';
+    panelAddr.textContent   = shop.address;
+    panel.classList.add('show');
+  });
+}
+</script>
+
+<!-- Google Maps API（APIキーを上の GOOGLE_MAPS_API_KEY に入力後、下の YOUR_API_KEY_HERE も同じキーに変更してください） -->
+<script async
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAK2IaHKIeNTkEiLguKp_b-2DMQs4-75e4&callback=initMap&language=ja&region=JP">
+</script>
+
+</body>
+</html>
