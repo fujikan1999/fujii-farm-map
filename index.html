@@ -375,8 +375,8 @@ function initMap() {
     // タップで情報パネル
     polygon.addListener('click', () => showPanel(field));
 
-    // 中心に番号ラベル
-    new google.maps.Marker({
+    // 中心に番号ラベル（タップでパネル表示）
+    const labelMarker = new google.maps.Marker({
       position:  centroid(field.coords),
       map:       map,
       label: {
@@ -387,13 +387,14 @@ function initMap() {
       },
       icon: {
         path:        google.maps.SymbolPath.CIRCLE,
-        scale:       13,
+        scale:       18,
         fillColor:   c.stroke,
         fillOpacity: 1,
         strokeColor: 'white',
         strokeWeight: 2,
       },
     });
+    labelMarker.addListener('click', () => showPanel(field));
   });
 
   // -------- 直売所マーカー --------
