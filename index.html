@@ -355,9 +355,6 @@ function initMap() {
     gestureHandling: 'greedy',    // スマホで1本指スクロール
   });
 
-  // 地図タップでパネルを閉じる
-  map.addListener('click', () => panel.classList.remove('show'));
-
   // -------- ポリゴン描画 --------
   fields.forEach(field => {
     const c = getColor(field.crop);
