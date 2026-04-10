@@ -23,6 +23,8 @@
     #map {
       position: fixed;
       top: 46px; left: 0; right: 0; bottom: 0;
+      width: 100%;
+      height: calc(100vh - 46px);
     }
 
     /* ========== 凡例 ========== */
@@ -341,6 +343,7 @@ document.getElementById('panel-close').addEventListener('click', () => {
 
 // ========== Google Maps 初期化 ==========
 function initMap() {
+  console.log('✅ initMap が呼ばれました');
   try {
   const map = new google.maps.Map(document.getElementById('map'), {
     center: { lat: 34.5606, lng: 135.6143 },
